@@ -1,0 +1,5 @@
+[MASTER]
+max-line-length=88
+
+[FORMAT]
+indent-string='    '
