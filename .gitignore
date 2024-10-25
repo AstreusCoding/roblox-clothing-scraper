@@ -133,3 +133,5 @@ pylint.log
 # System files
 .DS_Store
 Thumbs.db
+
+.sourcery.yaml

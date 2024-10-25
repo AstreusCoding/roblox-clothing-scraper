@@ -2,7 +2,7 @@
 title Python Project Launcher
 cls
 
-REM Check if the .venv directory exists
+REM Check if the venv directory exists
 IF NOT EXIST "venv" (
     echo =====================================================
     echo Virtual environment folder "venv" not found.
@@ -72,7 +72,7 @@ REM Run main.py with Python from the virtual environment
 echo =====================================================
 echo Running "src\main.py"...
 echo =====================================================
-python src\main.py
+python src\console_interface.py
 
 REM Pause to allow the user to see the output
 echo =====================================================
