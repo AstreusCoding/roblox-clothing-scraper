@@ -72,7 +72,11 @@ class CLIInterface(Interface):
             if index == -1:
                 index = self.MAX_LINE_LENGTH - 4
             lines.append(
-                f"{self.BORDER_CHAR} {message[:index].ljust(self.MAX_LINE_LENGTH - 4)} {self.BORDER_CHAR}"
+                (
+                    f"{self.BORDER_CHAR} "
+                    f"{message[:index].ljust(self.MAX_LINE_LENGTH - 4)} "
+                    f"{self.BORDER_CHAR}"
+                )
             )
             message = message[index:].lstrip()
 
@@ -119,7 +123,9 @@ class CLIInterface(Interface):
                 if index == -1:
                     index = max_content_length
                 formatted_lines.append(
-                    f"{self.BORDER_CHAR} {item[:index].ljust(max_content_length)} {self.BORDER_CHAR}"
+                    f"{self.BORDER_CHAR} "
+                    f"{item[:index].ljust(max_content_length)} "
+                    f"{self.BORDER_CHAR}"
                 )
                 item = item[index:].lstrip()
             formatted_lines.append(
