@@ -21,7 +21,9 @@ jobs:
         run: python -m pip install --upgrade pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
+          pip install pylint  # Ensure pylint is installed
 
       - name: Analyzing the code with pylint
         run: |
