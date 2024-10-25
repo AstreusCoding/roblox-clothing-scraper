@@ -2,6 +2,15 @@
 
 This project is a Python-based tool for downloading clothing assets from Roblox using the Roblox API. The application provides a user-friendly console interface for interacting with the API, enabling both individual asset downloads and mass downloads for entire Roblox groups.
 
+## TODO
+
+- **Multithreading**: Implement multithreading or asynchronous processing to speed up downloads, especially for large groups.
+- **Code Cleanup**: Refactor and optimize existing code for improved readability and maintainability.
+- **GUI**: Develop a graphical user interface (GUI) to make the application more accessible to users unfamiliar with CLI.
+- **Proxies**: Add support for proxies to avoid IP restrictions and handle large-scale scraping.
+- **Global Scraper**: Create a feature to randomly scrape clothing assets based on customizable filters (e.g., recently published, best-selling, most favorited, relevance).
+- **Improved File Management**: Enhance file organization for downloaded assets, such as categorizing by asset type, date, or other metadata.
+
 ## Features
 
 - **Single Asset Download**: Download individual clothing items by providing their ID or URL.
