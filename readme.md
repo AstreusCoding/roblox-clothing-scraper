@@ -10,6 +10,8 @@ This project is a Python-based tool for downloading clothing assets from Roblox 
 - **Proxies**: Add support for proxies to avoid IP restrictions and handle large-scale scraping.
 - **Global Scraper**: Create a feature to randomly scrape clothing assets based on customizable filters (e.g., recently published, best-selling, most favorited, relevance).
 - **Improved File Management**: Enhance file organization for downloaded assets, such as categorizing by asset type, date, or other metadata.
+- **Download clothing metadata**: Retrieve and store additional information about downloaded assets, such as asset name, creator, price, etc.
+- **Asset Search**: Enable asset search functionality to find specific items based on keywords, tags, or other criteria.
 
 ## Features
 
