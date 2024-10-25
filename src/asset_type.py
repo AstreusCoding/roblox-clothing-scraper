@@ -5,7 +5,7 @@ This module contains the asset type class and its implementations.
 import re
 from abc import ABC
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional, Type
 
 from PIL import Image
 
@@ -69,9 +69,9 @@ class AssetType(ABC):
         if overlay_path.exists():
             logger.debug("Loading overlay template from: %s", overlay_path)
             return Image.open(overlay_path)
-        else:
-            logger.error("Overlay template file not found at: %s", overlay_path)
-            return None
+
+        logger.error("Overlay template file not found at: %s", overlay_path)
+        return None
 
     async def overlay_image(self) -> Optional[Image.Image]:
         """
@@ -101,6 +101,12 @@ class ShirtAsset(AssetType):
 
     overlay_type = "shirt"
 
+    def print_details(self) -> None:
+        """
+        Print the details of the shirt asset.
+        """
+        logger.info("ShirtAsset with ID: %s, URL: %s", self.asset_id, self.asset_url)
+
 
 class PantsAsset(AssetType):
     """
@@ -109,14 +115,26 @@ class PantsAsset(AssetType):
 
     overlay_type = "pants"
 
+    def print_details(self) -> None:
+        """
+        Print the details of the pants asset.
+        """
+        logger.info("PantsAsset with ID: %s, URL: %s", self.asset_id, self.asset_url)
+
 
 class AssetTypeFactory:
     """
     Factory class to create instances of different asset types.
     """
 
-    @staticmethod
+    _asset_type_registry: Dict[str, Type[AssetType]] = {
+        "shirt": ShirtAsset,
+        "pants": PantsAsset,
+    }
+
+    @classmethod
     def create_asset(
+        cls,
         asset_type: str,
         asset_url: str,
         asset_img: Image.Image,
@@ -127,18 +145,26 @@ class AssetTypeFactory:
         Args:
             asset_type (str): The type of the asset (e.g., "shirt", "pants").
             asset_url (str): The URL of the asset.
+            asset_img (Image.Image): The image of the asset.
 
         Returns:
             Optional[AssetType]: An instance of the specified asset type, or None if the
                                 type is invalid.
         """
         asset_type_lower = asset_type.lower()
-        if asset_type_lower == "shirt":
-            logger.debug("Creating ShirtAsset for URL: %s", asset_url)
-            return ShirtAsset(asset_url, asset_img)
-        elif asset_type_lower == "pants":
-            logger.debug("Creating PantsAsset for URL: %s", asset_url)
-            return PantsAsset(asset_url, asset_img)
-        else:
-            logger.error("Invalid asset type provided: %s", asset_type)
-            return None
+        if asset_class := cls._asset_type_registry.get(asset_type_lower):
+            logger.debug("Creating %s for URL: %s", asset_class.__name__, asset_url)
+            return asset_class(asset_url, asset_img)
+
+        logger.error("Invalid asset type provided: %s", asset_type)
+        return None
+
+    @classmethod
+    def get_supported_asset_types(cls) -> List[str]:
+        """
+        Get a list of supported asset types.
+
+        Returns:
+            List[str]: A list of supported asset types.
+        """
+        return list(cls._asset_type_registry.keys())
