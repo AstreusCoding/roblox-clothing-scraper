@@ -5,25 +5,18 @@ and image data from URLs.
 Classes:
     APIHandler: A class to handle asynchronous fetching of JSON, text, and image data from URLs.
 
-Functions:
-    __init__(self): Initializes the APIHandler instance.
-    _is_json_response(self, response: aiohttp.ClientResponse) -> bool: Checks if the response
-        content type is JSON.
-    _handle_response_status(self, response: aiohttp.ClientResponse, attempt: int) -> 
-        Dict[str, Any]: Handles the response status and logs any errors.
-    _get(self, session: aiohttp.ClientSession, url: str, 
-        params: Optional[Dict[str, str]] = None, max_retries: int = 5) -> 
-        Union[dict, str, None]: Sends a GET request to the given URL and returns the JSON response.
-    get_session(self) -> aiohttp.ClientSession: Gets or creates an aiohttp.ClientSession instance.
-    fetch_json(self, url: str, params: Optional[Dict[str, str]] = None, retries: int = 5) -> 
-        Union[dict, None]: Fetches JSON data from the given URL using aiohttp with a retry mechanism
-    fetch_text(self, url: str, retries: int = 5) -> Optional[str]: Fetches text data from the
-        given URL using aiohttp with a retry mechanism.
-    fetch_image(self, url: str) -> Optional[bytes]: Fetches image data from the given URL.
-    fetch_paginated_data(self, url: str, params: dict, limit: int = 10, retries: int = 5) -> 
-        List[dict]: Fetches paginated data from the given URL, handling pagination and returning
-        all results.
-    close(self) -> None: Closes the aiohttp.ClientSession if it is open.
+Methods:
+    __init__: Initializes the APIHandler instance.
+    _is_json_response: Checks if the response content type is JSON.
+    _handle_response_status: Handles the response status and logs any errors.
+    _get: Sends a GET request to the given URL with enhanced error handling and retry logic.
+    get_session: Gets or creates an aiohttp.ClientSession instance.
+    fetch_json: Fetches JSON data from the given URL using aiohttp with a retry mechanism.
+    fetch_text: Fetches text data from the given URL using aiohttp with a retry mechanism.
+    fetch_image: Fetches image data from the given URL.
+    fetch_paginated_data: Fetches paginated data from the given URL,
+                          handling pagination and returning all results.
+    close: Closes the aiohttp.ClientSession if it is open.
 """
 
 import asyncio
@@ -71,20 +64,32 @@ class APIHandler:
     """
 
     def __init__(self):
+        """Initializes the APIHandler instance."""
         self.session: Optional[aiohttp.ClientSession] = None
         self.logger: Logger = setup_logger(__name__)
 
     async def _is_json_response(self, response: aiohttp.ClientResponse) -> bool:
-        """
-        Check if the response content type is JSON.
+        """Check if the response content type is JSON.
+
+        Args:
+            response (aiohttp.ClientResponse): The response object to check.
+
+        Returns:
+            bool: True if the response content type is JSON, False otherwise.
         """
         return "application/json" in response.headers.get("Content-Type", "")
 
     async def _handle_response_status(
         self, response: aiohttp.ClientResponse, attempt: int
     ) -> Dict[str, Any]:
-        """
-        Handle the response status and log any errors.
+        """Handle the response status and log any errors.
+
+        Args:
+            response (aiohttp.ClientResponse): The response object.
+            attempt (int): The current attempt number for the request.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing response metadata.
         """
         request_data = {
             "url": response.url,
@@ -120,41 +125,75 @@ class APIHandler:
         url: str,
         params: Optional[Dict[str, str]] = None,
         max_retries: int = 5,
-    ) -> Union[dict, str, None]:
+    ) -> Optional[Dict[str, Any]]:
+        """Send a GET request to the given URL with enhanced error handling and retry logic.
+
+        Args:
+            session (aiohttp.ClientSession): The session to use for the request.
+            url (str): The URL to send the GET request to.
+            params (Optional[Dict[str, str]]): Optional query parameters for the request.
+            max_retries (int): Maximum number of retry attempts.
+
+        Returns:
+            Optional[Dict[str, Any]]: A dictionary containing the response data,
+                                     or None if the request fails.
         """
-        Send a GET request to the given URL and return the JSON response.
-        """
-        failed_attempts: list = [dict]
+        failed_attempts = []
+        timeout = aiohttp.ClientTimeout(total=30)  # Adjust timeout as needed
+
         for attempt in range(max_retries):
             try:
-                async with session.get(url, params=params, ssl=ssl_context) as response:
+                async with session.get(
+                    url, params=params, ssl=ssl_context, timeout=timeout
+                ) as response:
                     status_response = await self._handle_response_status(response, attempt)
 
                     if response.status != 200:
                         failed_attempts.append(status_response)
                         continue
 
-                    if self._is_json_response(response):
-                        return await response.json()
-                    else:
-                        return await response.text()
-
-            except aiohttp.ClientError as e:
+                    return {
+                        "response": response,
+                        "text": (
+                            None
+                            if await self._is_json_response(response)
+                            else await response.text()
+                        ),
+                        "json": (
+                            await response.json()
+                            if await self._is_json_response(response)
+                            else None
+                        ),
+                    }
+            except (
+                aiohttp.ClientConnectionError,
+                aiohttp.ServerDisconnectedError,
+                aiohttp.ClientPayloadError,
+            ) as e:
                 wait_time = constants.RATE_LIMIT_SLEEP**attempt
                 self.logger.error(
-                    "HTTP error occurred while sending "
-                    "GET request to %s: %s. Retrying in %s seconds...",
+                    "Network error occurred while sending GET request to %s: %s. "
+                    "Retrying in %s seconds...",
                     url,
                     e,
                     wait_time,
                 )
                 await asyncio.sleep(wait_time)
 
-        self.logger.error("Exceeded retries. Failed to fetch JSON from %s.", url)
+            except asyncio.TimeoutError:
+                self.logger.warning(
+                    "Request to %s timed out. Attempt %d/%d", url, attempt + 1, max_retries
+                )
+
+        self.logger.error("Exceeded retries. Failed to fetch data from %s.", url)
         return None
 
     async def get_session(self) -> aiohttp.ClientSession:
-        """Get or create an aiohttp.ClientSession instance."""
+        """Get or create an aiohttp.ClientSession instance.
+
+        Returns:
+            aiohttp.ClientSession: An instance of aiohttp.ClientSession.
+        """
         if self.session is None or self.session.closed:
             self.session = aiohttp.ClientSession()
         return self.session
@@ -162,62 +201,44 @@ class APIHandler:
     async def fetch_json(
         self, url: str, params: Optional[Dict[str, str]] = None, retries: int = 5
     ) -> Union[dict, None]:
-        """
-        Fetch JSON data from the given URL using aiohttp with a retry mechanism.
+        """Fetch JSON data from the given URL using aiohttp with a retry mechanism.
+
+        Args:
+            url (str): The URL to fetch JSON data from.
+            params (Optional[Dict[str, str]]): Optional query parameters for the request.
+            retries (int): Number of retry attempts.
+
+        Returns:
+            Union[dict, None]: The JSON data as a dictionary, or None if an error occurs.
         """
         session = await self.get_session()
-        response = await self._get(session, url, params, retries)
+        response_data = await self._get(session, url, params, retries)
+        if not response_data or not response_data.get("json"):
+            return None
 
-        if response and isinstance(response, dict):
-            self.logger.debug("Successfully fetched JSON from %s", url)
-            return response
-
-        self.logger.error("Failed to fetch JSON from %s", url)
-        return None
+        self.logger.debug("Successfully fetched JSON from %s", url)
+        return response_data["json"]
 
     async def fetch_text(self, url: str, retries: int = 5) -> Optional[str]:
-        """
-        Fetch text data from the given URL using aiohttp with a retry mechanism.
+        """Fetch text data from the given URL using aiohttp with a retry mechanism.
+
+        Args:
+            url (str): The URL to fetch text data from.
+            retries (int): Number of retry attempts.
+
+        Returns:
+            Optional[str]: The text data as a string, or None if an error occurs.
         """
         session = await self.get_session()
-        for attempt in range(retries):
-            try:
-                async with session.get(url, ssl=ssl_context) as response:
-                    if response.status == 200:
-                        self.logger.debug("Successfully fetched text from %s", url)
-                        return await response.text()
-                    elif response.status == 429:  # Handle rate limiting
-                        wait_time = 2**attempt
-                        self.logger.warning(
-                            "Rate limited when fetching text from %s. Retrying in %s seconds...",
-                            url,
-                            wait_time,
-                        )
-                        await asyncio.sleep(wait_time)
-                    else:
-                        self.logger.error(
-                            "Failed to fetch text from %s. Status: %s",
-                            url,
-                            response.status,
-                        )
-                        return None
-            except aiohttp.ClientError as e:
-                wait_time = 2**attempt
-                self.logger.error(
-                    """HTTP error occurred while fetching 
-                    text from %s: %s. Retrying in %s seconds...""",
-                    url,
-                    e,
-                    wait_time,
-                )
-                await asyncio.sleep(wait_time)
+        response_data = await self._get(session, url, max_retries=retries)
+        if not response_data or not response_data.get("text"):
+            return None
 
-        self.logger.error("Exceeded retries. Failed to fetch text from %s.", url)
-        return None
+        self.logger.debug("Successfully fetched text from %s", url)
+        return response_data["text"]
 
     async def fetch_image(self, url: str) -> Optional[bytes]:
-        """
-        Fetches image data from the given URL.
+        """Fetch image data from the given URL.
 
         Args:
             url (str): The URL to fetch the image from.
@@ -226,23 +247,31 @@ class APIHandler:
             Optional[bytes]: The image data as bytes, or None if an error occurs.
         """
         session = await self.get_session()
+        response_data = await self._get(session, url)
+        if not response_data or not response_data.get("response"):
+            return None
+
         try:
-            async with session.get(url) as response:
-                if response.status == 200:
-                    self.logger.debug("Successfully fetched image from %s", url)
-                    return await response.read()
-                else:
-                    self.logger.error("Failed to fetch image. Status code: %s", response.status)
-                    return None
-        except aiohttp.ClientError as e:
-            self.logger.error("HTTP error occurred while fetching image from %s: %s", url, str(e))
+            image_data = await response_data["response"].read()
+            self.logger.debug("Successfully fetched image from %s", url)
+            return image_data
+        except aiohttp.ContentTypeError:
+            self.logger.error("Failed to fetch image from %s", url)
             return None
 
     async def fetch_paginated_data(
         self, url: str, params: dict, limit: int = 10, retries: int = 5
     ) -> List[dict]:
-        """
-        Fetch paginated data from the given URL, handling pagination and returning all results.
+        """Fetch paginated data from the given URL, handling pagination and returning all results.
+
+        Args:
+            url (str): The URL to fetch data from.
+            params (dict): Query parameters for the request.
+            limit (int): The number of items to fetch per page.
+            retries (int): Number of retry attempts.
+
+        Returns:
+            List[dict]: A list of dictionaries containing the fetched data.
         """
         all_data: List[dict] = []
         params["limit"] = str(limit)
