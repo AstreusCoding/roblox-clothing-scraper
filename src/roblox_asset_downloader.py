@@ -1,137 +1,221 @@
 """
-Description: This script downloads Roblox clothing assets
-using the Roblox Asset Delivery API. It can download the
-raw asset or overlay it on a shirt or pants template.
+A class to download Roblox clothing assets using the Roblox Asset Delivery API.
+
+This class provides methods to fetch clothing assets from Roblox,
+extract necessary information, and download images, optionally
+overlaying them on shirt or pants templates.
+
+Attributes:
+    file_handler (FileHandler): An instance of FileHandler to manage file operations.
+    api_handler (APIHandler): An instance of APIHandler to handle API requests.
+
+Methods:
+    fetch_asset(asset_url: str) -> Optional[dict]:
+        Fetches the asset data from a given URL.
+    fetch_image_location(asset_id: str) -> Optional[str]:
+        Fetches the image location for the given asset ID.
+    download_asset(url: str) -> Optional[Image.Image]:
+        Downloads an image from the given URL.
+    process_asset(clothing_id: str) -> None:
+        Processes a clothing asset by fetching its image and saving it.
 """
 
-import asyncio
-import os
+import io
 import re
 from typing import Optional
 
-import aiohttp
-from PIL import Image
+from bs4 import BeautifulSoup
+from PIL import Image, UnidentifiedImageError
 
 import constants
+from api_handler import APIHandler
+from asset_type import AssetTypeFactory
+from custom_logger import setup_logger
 from file_handler import FileHandler
+from utils import validate_clothing_id
+
+# Set up the logger for this module
+logger = setup_logger(__name__)
 
 
 class RobloxAssetDownloader:
     """
     A class to download Roblox clothing assets using the Roblox Asset Delivery API.
+
+    This class provides methods to fetch clothing assets from Roblox,
+    extract necessary information, and download images, optionally
+    overlaying them on shirt or pants templates.
+
+    Attributes:
+        file_handler (FileHandler): An instance of FileHandler to manage file operations.
+        api_handler (APIHandler): An instance of APIHandler to handle API requests.
     """
 
     def __init__(self) -> None:
         self.file_handler = FileHandler()
+        self.api_handler = APIHandler()
 
-    @staticmethod
-    def get_between(source: str, start: str, end: str) -> str:
-        """Extract a substring between two delimiters."""
-        try:
-            return re.search(f"{start}(.*?){end}", source).group(1)
-        except AttributeError:
-            return ""
+    async def fetch_asset(self, asset_url: str) -> Optional[dict]:
+        """
+        Fetches the asset data from the given asset URL.
 
-    async def fetch(self, session: aiohttp.ClientSession, url: str) -> Optional[str]:
-        """Fetch the content of a URL."""
-        try:
-            async with session.get(url) as response:
-                if response.status != 200:
-                    print(f"Failed to fetch: {url}")
-                    return None
-                return await response.text()
-        except aiohttp.ClientError as e:
-            print(f"HTTP error occurred: {e}")
+        Args:
+            asset_url (str): The URL of the asset to fetch.
+
+        Returns:
+            Optional[dict]: A dictionary containing the asset data if successful, otherwise None.
+        """
+        asset_id = re.sub(r"[^0-9]", "", asset_url)
+        if not asset_id:
+            logger.error("Invalid asset URL provided: %s", asset_url)
             return None
 
-    async def fetch_image(
-        self, session: aiohttp.ClientSession, url: str
-    ) -> Optional[Image.Image]:
-        """Fetch an image from a URL."""
-        try:
-            async with session.get(url) as response:
-                if response.status != 200:
-                    print(f"Failed to download image from: {url}")
-                    return None
-                return Image.open(await response.content.read())
-        except aiohttp.ClientError as e:
-            print(f"HTTP error occurred: {e}")
+        asset_delivery_url: str = constants.ROUTES["base_asset"].format(clothing_id=asset_id)
+
+        # Fetch the asset page as text using the API handler's fetch_text method
+        data = await self.api_handler.fetch_text(asset_delivery_url)
+        if not data:
+            logger.error("Failed to fetch asset data from: %s", asset_delivery_url)
             return None
 
-    async def download_image(
-        self, clothing_id: str, overlay_type: Optional[str] = None
-    ) -> None:
-        """Download and optionally overlay a Roblox clothing asset."""
-        base_url = constants.BASE_URL_TEMPLATE.format(clothing_id=clothing_id)
+        # Parse the HTML response using BeautifulSoup
+        data_soup = BeautifulSoup(data, "html.parser")
+        content_name = data_soup.find("content").get("name")
+        template_id = data_soup.find("url").text
 
-        async with aiohttp.ClientSession() as session:
-            # Step 1: Fetch HTML response from Roblox Asset Delivery API
-            html = await self.fetch(session, base_url)
-            if not html:
-                return
+        if not content_name or not template_id:
+            logger.error("Failed to extract asset data from: %s", asset_delivery_url)
+            return None
 
-            # Step 2: Extract the Asset ID
-            asset_id = self.get_between(
-                html, constants.ROBLOX_ASSET_URL_START, constants.ROBLOX_ASSET_URL_END
-            )
-            if not asset_id:
-                print("Failed to extract asset ID.")
-                return
+        template_id = validate_clothing_id(template_id)
 
-            # Step 3: Fetch image location URL
-            imagelocation_url = constants.IMAGE_LOCATION_URL_TEMPLATE.format(
-                asset_id=asset_id
-            )
-            imagelocation_response = await self.fetch(session, imagelocation_url)
-            if not imagelocation_response:
-                return
+        discovered_asset = {
+            "asset id": asset_id,
+            "content name": content_name,
+            "template id": template_id,
+        }
 
-            imageloc = self.get_between(
-                imagelocation_response,
-                constants.IMAGE_LOCATION_JSON_START,
-                constants.IMAGE_LOCATION_JSON_END,
-            )
+        logger.debug("Discovered Asset: %s", discovered_asset)
 
-            # Step 4: Download the actual image
-            img = await self.fetch_image(session, imageloc)
-            if not img:
-                return
+        # Map content names like "PantsTemplate" and "ShirtTemplate" to easier names
+        if "PantsTemplate" in discovered_asset["content name"]:
+            discovered_asset["content name"] = "pants"
+        elif "ShirtTemplate" in discovered_asset["content name"]:
+            discovered_asset["content name"] = "shirt"
 
-            # Step 5: Overlay the shirt or pants template if applicable
-            if overlay_type:
-                template = None
-                if overlay_type == "Shirt":
-                    template = Image.open("shirt_template.png")
-                elif overlay_type == "Pants":
-                    template = Image.open("pants_template.png")
+        return discovered_asset
 
-                if template:
-                    img = Image.alpha_composite(
-                        img.convert("RGBA"), template.convert("RGBA")
-                    )
+    async def fetch_image_location(self, asset_id: str) -> Optional[str]:
+        """
+        Fetches the image location URL for a given asset ID.
 
-            # Step 6: Save the image
-            self.file_handler.save_image(img, f"{clothing_id}.png")
+        Args:
+            asset_id (str): The ID of the asset for which to fetch the image location.
 
+        Returns:
+            Optional[str]: The image location URL if found, otherwise None.
+        """
+        imagelocation_url: str = constants.ROUTES["image_location"].format(asset_id=asset_id)
+        logger.debug("Fetching image location from: %s", imagelocation_url)
 
-async def main() -> None:
-    """Main function to simulate the UI function with inputs."""
-    clothing_id = input("Enter Clothing ID or Catalog URL: ")
-    clothing_id = re.sub(r"[^0-9]", "", clothing_id)  # Remove non-numeric characters
+        # Use fetch_json to get the image location JSON response
+        response = await self.api_handler.fetch_json(imagelocation_url)
+        if not response:
+            logger.error("Failed to fetch image location for asset ID: %s", asset_id)
+            return None
 
-    if clothing_id:
-        overlay_choice = input(
-            "Do you want an overlay? Enter 'Shirt' or 'Pants', or leave blank: "
-        )
-        overlay_choice: Optional[str] = (
-            overlay_choice.strip() if overlay_choice in ["Shirt", "Pants"] else None
-        )
+        return self.extract_image_location_from_json(response)
 
-        downloader = RobloxAssetDownloader()
-        await downloader.download_image(clothing_id, overlay_choice)
-    else:
-        print("Invalid input. Please enter a valid Clothing ID.")
+    def extract_image_location_from_json(self, json_dict: dict) -> Optional[str]:
+        """
+        Extracts the image location URL from the given JSON response.
 
+        Args:
+            json_dict (dict): The JSON content to search for the image location.
 
-if __name__ == "__main__":
-    asyncio.run(main())
+        Returns:
+            Optional[str]: The extracted image location URL if found, otherwise None.
+        """
+        try:
+            return json_dict["location"]
+        except KeyError:
+            logger.error("No location found in the JSON response.")
+            return None
+
+    async def download_asset(self, url: str) -> Optional[Image.Image]:
+        """
+        Asynchronously fetches an image from the given URL.
+
+        Args:
+            url (str): The URL of the image to download.
+
+        Returns:
+            Optional[Image.Image]: The downloaded image as a PIL Image object if successful,
+                                    otherwise None if the download fails or an error occurs.
+        """
+        logger.debug("Downloading asset image from: %s", url)
+        try:
+            # Fetch the image bytes from the API handler
+            image_bytes = await self.api_handler.fetch_image(url)
+            if not image_bytes:
+                logger.error("Failed to download image from: %s", url)
+                return None
+            asset_img = Image.open(io.BytesIO(image_bytes))
+
+            # Try to load the image with PIL from the image bytes
+            try:
+                return asset_img
+            except UnidentifiedImageError as e:
+                logger.error("Failed to identify image from URL: %s. Error: %s", url, str(e))
+                return None
+        except (IOError, OSError, ValueError) as e:
+            logger.error("An error occurred while downloading the image from %s: %s", url, str(e))
+            return None
+
+    async def process_asset(self, clothing_id: str) -> None:
+        """
+        Processes the given clothing asset URL to download the image.
+
+        Args:
+            clothing_id (str): The ID of the clothing asset to download.
+
+        Returns:
+            None
+        """
+        # Fetch the asset data (e.g., asset ID, template, etc.)
+        asset_data = await self.fetch_asset(clothing_id)
+        if not asset_data:
+            logger.error("No asset data found for clothing ID: %s", clothing_id)
+            return
+
+        # Fetch the image location URL
+        image_location = await self.fetch_image_location(asset_data["template id"])
+        if not image_location:
+            return
+
+        logger.info("Downloading image from URL: %s", image_location)
+        # Download the image from the URL
+        asset_img = await self.download_asset(image_location)
+        if not asset_img:
+            return
+
+        # Create an asset instance for handling overlay operations
+        asset_type = asset_data["content name"]
+        asset_instance = AssetTypeFactory.create_asset(asset_type, clothing_id, asset_img)
+
+        if not asset_instance:
+            logger.error("Failed to create asset instance for asset type: %s", asset_type)
+            return
+
+        # Overlay the image on the template (if needed)
+        overlayed_image = await asset_instance.overlay_image()
+        if not overlayed_image:
+            logger.error("Failed to overlay image on %s template.", asset_type)
+            return
+
+        # Save the overlayed image
+        await asset_instance.save_asset_image()
+        logger.info("Successfully processed and saved asset for clothing ID: %s", clothing_id)
+
+        await self.api_handler.close()
+        logger.debug("API handler closed.")
