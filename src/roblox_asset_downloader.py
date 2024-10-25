@@ -80,6 +80,11 @@ class RobloxAssetDownloader:
 
         # Parse the HTML response using BeautifulSoup
         data_soup = BeautifulSoup(data, "html.parser")
+
+        if not data_soup:
+            logger.error("Failed to parse asset data from: %s", asset_delivery_url)
+            return None
+
         content_name = data_soup.find("content").get("name")
         template_id = data_soup.find("url").text
 
@@ -87,6 +92,7 @@ class RobloxAssetDownloader:
             logger.error("Failed to extract asset data from: %s", asset_delivery_url)
             return None
 
+        # Validate and extract the template ID to ensure it's a valid clothing ID
         template_id = validate_clothing_id(template_id)
 
         discovered_asset = {
