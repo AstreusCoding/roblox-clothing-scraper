@@ -72,7 +72,7 @@ REM Run main.py with Python from the virtual environment
 echo =====================================================
 echo Running "src\main.py"...
 echo =====================================================
-python src\console_interface.py
+python src\main.py
 
 REM Pause to allow the user to see the output
 echo =====================================================
