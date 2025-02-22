@@ -1,5 +1,7 @@
 """
 Main module to run the CLI interface and handle asset downloading.
+
+main.py
 """
 
 import asyncio
@@ -100,6 +102,7 @@ async def handle_download() -> None:
 
     clothing_id_input = interface.get_input("Enter a Clothing ID or URL: ")
 
+    asset_id, asset_type = None, None
     if result := extract_id_and_type_from_url(clothing_id_input):
         asset_id, asset_type = result
         interface.display_output(f"URL identified as {asset_type} with ID {asset_id}")
@@ -114,6 +117,11 @@ async def handle_download() -> None:
             interface.display_output("Invalid input. Please enter a valid Clothing ID or URL.")
             return
 
+    if asset_type is None or asset_id is None:
+        error_msg = f"asset type: {asset_type} : asset id: {asset_id}"
+        logger.error(error_msg)
+        return
+    
     if asset_type != "group":
         await handle_asset(interface, asset_id)
     else:

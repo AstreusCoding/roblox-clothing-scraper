@@ -17,6 +17,9 @@ Methods:
     fetch_paginated_data: Fetches paginated data from the given URL,
                           handling pagination and returning all results.
     close: Closes the aiohttp.ClientSession if it is open.
+    
+
+api_handler.py
 """
 
 import asyncio
@@ -116,7 +119,7 @@ class APIHandler:
 
         if response.status == 429:
             await asyncio.sleep(request_data["potential_wait_time"])
-
+        self.logger.info(request_data)
         return request_data
 
     async def _get(
@@ -151,6 +154,14 @@ class APIHandler:
                     if response.status != 200:
                         failed_attempts.append(status_response)
                         continue
+                    
+                    text = (
+                            None
+                            if await self._is_json_response(response)
+                            else await response.text()
+                        )
+                    self.logger.debug("text")
+                    self.logger.debug(text)
 
                     return {
                         "response": response,
@@ -238,26 +249,20 @@ class APIHandler:
         return response_data["text"]
 
     async def fetch_image(self, url: str) -> Optional[bytes]:
-        """Fetch image data from the given URL.
-
-        Args:
-            url (str): The URL to fetch the image from.
-
-        Returns:
-            Optional[bytes]: The image data as bytes, or None if an error occurs.
-        """
         session = await self.get_session()
-        response_data = await self._get(session, url)
-        if not response_data or not response_data.get("response"):
+        timeout = aiohttp.ClientTimeout(total=30)  # Adjust as needed
+        try:
+            async with session.get(url, ssl=ssl_context, timeout=timeout) as response:
+                if response.status != 200:
+                    self.logger.error("Failed to fetch image from %s. Status: %s", url, response.status)
+                    return None
+                image_data = await response.read()
+                self.logger.debug("Successfully fetched image from %s", url)
+                return image_data
+        except Exception as e:
+            self.logger.error("Error fetching image from %s: %s", url, str(e))
             return None
 
-        try:
-            image_data = await response_data["response"].read()
-            self.logger.debug("Successfully fetched image from %s", url)
-            return image_data
-        except aiohttp.ContentTypeError:
-            self.logger.error("Failed to fetch image from %s", url)
-            return None
 
     async def fetch_paginated_data(
         self, url: str, params: dict, limit: int = 10, retries: int = 5

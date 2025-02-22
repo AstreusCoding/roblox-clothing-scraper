@@ -37,7 +37,7 @@ def extract_id_and_type_from_url(input_str: str) -> Optional[Tuple[str, str]]:
         if the input is a valid URL, otherwise None.
     """
     # Regular expressions to match the two URL patterns
-    group_pattern = r"https://www\.roblox\.com/groups/(\d+)"
+    group_pattern = r"https://www\.roblox\.com/communities/(\d+)"
     if group_match := re.match(group_pattern, input_str):
         return group_match[1], "group"
 

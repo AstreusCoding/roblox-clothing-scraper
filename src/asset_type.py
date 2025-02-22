@@ -32,7 +32,8 @@ class AssetType(ABC):
         self.asset_url = asset_url
 
         self.file_handler = FileHandler()
-        self.base_url = constants.ROUTES["base_asset"].format(clothing_id=self.asset_id)
+        self.base_url = constants.ROUTES["base_asset"].format(asset_id=self.asset_id)
+
 
         self.overlay_image_template: Optional[Image.Image] = self.get_overlay_template()
         self.asset_image: Image.Image = asset_image

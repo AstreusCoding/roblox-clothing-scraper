@@ -14,7 +14,7 @@ IMAGE_LOCATION_JSON_END = '"'
 
 # Centralized ROUTES dictionary for URL templates
 ROUTES = {
-    "group_info": "https://groups.roblox.com/v1/groups/{group_id}",
+    "group_info": "https://groups.roblox.com/v1/communities/{group_id}",
     "catalog": "https://www.roblox.com/catalog/{catalog_id}",  # Specific catalog item URL
     "catalog_search": "https://catalog.roblox.com/v1/search/items",  # General catalog search API
     "base_asset": (

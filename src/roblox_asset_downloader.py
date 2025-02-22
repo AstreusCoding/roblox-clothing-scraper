@@ -18,6 +18,8 @@ Methods:
         Downloads an image from the given URL.
     process_asset(clothing_id: str) -> None:
         Processes a clothing asset by fetching its image and saving it.
+
+roblox_asset_downloader.py
 """
 
 import io
@@ -70,7 +72,7 @@ class RobloxAssetDownloader:
             logger.error("Invalid asset URL provided: %s", asset_url)
             return None
 
-        asset_delivery_url: str = constants.ROUTES["base_asset"].format(clothing_id=asset_id)
+        asset_delivery_url: str = constants.ROUTES["base_asset"].format(asset_id=asset_id)
 
         # Fetch the asset page as text using the API handler's fetch_text method
         data = await self.api_handler.fetch_text(asset_delivery_url)
@@ -151,32 +153,23 @@ class RobloxAssetDownloader:
     async def download_asset(self, url: str) -> Optional[Image.Image]:
         """
         Asynchronously fetches an image from the given URL.
-
-        Args:
-            url (str): The URL of the image to download.
-
-        Returns:
-            Optional[Image.Image]: The downloaded image as a PIL Image object if successful,
-                                    otherwise None if the download fails or an error occurs.
         """
         logger.debug("Downloading asset image from: %s", url)
         try:
-            # Fetch the image bytes from the API handler
+            # Fetch the image bytes (ensure binary mode)
             image_bytes = await self.api_handler.fetch_image(url)
             if not image_bytes:
                 logger.error("Failed to download image from: %s", url)
                 return None
+            # Ensure we're treating it as binary data
             asset_img = Image.open(io.BytesIO(image_bytes))
-
-            # Try to load the image with PIL from the image bytes
-            try:
-                return asset_img
-            except UnidentifiedImageError as e:
-                logger.error("Failed to identify image from URL: %s. Error: %s", url, str(e))
-                return None
-        except (IOError, OSError, ValueError) as e:
-            logger.error("An error occurred while downloading the image from %s: %s", url, str(e))
+            asset_img.load()  # Force loading of the image
+            
+            return asset_img
+        except (IOError, OSError, UnidentifiedImageError) as e:
+            logger.error("Error processing image from %s: %s", url, str(e))
             return None
+
 
     async def process_asset(self, clothing_id: str) -> None:
         """
@@ -193,7 +186,7 @@ class RobloxAssetDownloader:
         if not asset_data:
             logger.error("No asset data found for clothing ID: %s", clothing_id)
             return
-
+        logger.info("asset data found")
         # Fetch the image location URL
         image_location = await self.fetch_image_location(asset_data["template id"])
         if not image_location:
